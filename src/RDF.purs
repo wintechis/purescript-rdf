@@ -3,6 +3,7 @@ module RDF (
   Quad,
   Graph,
   namedNode,
+  namedNode',
   blankNode,
   literalType,
   literalLang,
@@ -18,14 +19,18 @@ module RDF (
   predicate,
   object,
   graph,
-  serialize
+  serialize,
+  termToBoolean,
+  termToInt
 ) where
 
 import Prelude hiding (map)
 
 import Data.Foldable (foldl)
+import Data.Int (fromString)
 import Data.Maybe (Maybe(..))
 import Data.Set (Set, map)
+import RDF.Prefixes (Prefix(..), xsd)
 
 data Term = NamedNode String | BlankNode String | LiteralLang String String | LiteralType String Term | Variable String | DefaultGraph
 derive instance eqTerm :: Eq Term
@@ -49,6 +54,9 @@ type Graph = Set Quad
 
 namedNode :: String -> Term
 namedNode s = NamedNode s
+
+namedNode' :: Prefix -> String -> Term
+namedNode' (Prefix prefix) s = NamedNode $ prefix <> s
 
 blankNode :: String -> Term
 blankNode s = BlankNode s
@@ -109,3 +117,16 @@ graph (Quad _ _ _ g) = g
 
 serialize :: Graph -> String
 serialize g = foldl (\q1 q2 -> q1 <> "\n" <> q2) "" $ map show g
+
+termToBoolean :: Term -> Maybe Boolean
+termToBoolean (LiteralType v t) = if t == namedNode' xsd "boolean" then
+  case v of 
+    "true" -> Just true
+    "false" -> Just false
+    _ -> Nothing
+  else Nothing
+termToBoolean _ = Nothing
+
+termToInt :: Term -> Maybe Int
+termToInt (LiteralType v t) = if t == namedNode' xsd "integer" then fromString v else Nothing
+termToInt _ = Nothing
