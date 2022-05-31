@@ -14,9 +14,11 @@ to generate this file without the comments in this block.
 , dependencies =
   [ "arrays"
   , "console"
+  , "datetime"
   , "effect"
   , "either"
   , "foldable-traversable"
+  , "formatters"
   , "integers"
   , "lists"
   , "maybe"

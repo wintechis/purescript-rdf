@@ -2,6 +2,7 @@ module RDF (
   Term,
   Quad,
   Graph,
+  dateTimeToTerm,
   namedNode,
   namedNode',
   blankNode,
@@ -26,8 +27,11 @@ module RDF (
 
 import Prelude hiding (map)
 
+import Data.DateTime (DateTime)
 import Data.Foldable (foldl)
+import Data.Formatter.DateTime (Formatter, FormatterCommand(..), format)
 import Data.Int (fromString)
+import Data.List (fromFoldable)
 import Data.Maybe (Maybe(..))
 import Data.Set (Set, map)
 import RDF.Prefixes (Prefix(..), xsd)
@@ -130,3 +134,24 @@ termToBoolean _ = Nothing
 termToInt :: Term -> Maybe Int
 termToInt (LiteralType v t) = if t == namedNode' xsd "integer" then fromString v else Nothing
 termToInt _ = Nothing
+
+iso8601Format :: Formatter
+iso8601Format = fromFoldable
+  [ YearFull
+  , Placeholder "-"
+  , MonthTwoDigits
+  , Placeholder "-"
+  , DayOfMonthTwoDigits
+  , Placeholder "T"
+  , Hours24
+  , Placeholder ":"
+  , MinutesTwoDigits
+  , Placeholder ":"
+  , SecondsTwoDigits
+  , Placeholder "."
+  , Milliseconds
+  , Placeholder "Z"
+  ]
+
+dateTimeToTerm :: DateTime -> Term
+dateTimeToTerm dt = literalType (format iso8601Format dt) (namedNode' xsd "dateTimeStamp")
