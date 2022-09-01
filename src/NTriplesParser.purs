@@ -12,11 +12,11 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Set (fromFoldable) as S
 import Data.String (codePointFromChar)
 import Data.String.CodeUnits (fromCharArray)
+import Parsing (ParseError, Parser, fail, runParser)
+import Parsing.Combinators (lookAhead, many1, manyTill, optionMaybe, try, (<|>))
+import Parsing.String (anyChar, char, string)
+import Parsing.String.Basic (alphaNum, digit, hexDigit, letter, noneOf, oneOf, skipSpaces)
 import RDF (Quad, Term, Graph, blankNode, defaultGraph, literalLang, literalType, namedNode, quad)
-import Text.Parsing.Parser (ParseError, Parser, fail, runParser)
-import Text.Parsing.Parser.Combinators (lookAhead, many1, manyTill, optionMaybe, try, (<|>))
-import Text.Parsing.Parser.String (anyChar, char, noneOf, oneOf, skipSpaces, string)
-import Text.Parsing.Parser.String.Basic (alphaNum, digit, hexDigit, letter)
 
 parse :: String -> Either ParseError Graph
 parse s = runParser s ntriplesDoc
