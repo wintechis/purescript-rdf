@@ -1,10 +1,7 @@
-# RDF Library for Purescript (WIP)
-## Building
+# RDF for Purescript
 
-You will need to install [PureScript](https://www.purescript.org/) to build the project. You usually can do this by running `npm install -g purescript`.
-
-Then just run `spago build` to build the package.
+A PureScript implementation of the [RDF/JS](https://rdf.js.org/data-model-spec/) data model.
 
 ## Acknowledgments
 
-This work was partially funded by the German Federal Ministry of Education and Research through the MOSAIK project (grant no. 01IS18070A).
+This work has been partially funded by the German Federal Ministry of Education and Research through the MOSAIK project (grant no. 01IS18070A) and the MANDAT project (grant no. 16DTM107A).
