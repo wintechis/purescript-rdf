@@ -1,0 +1,32 @@
+{
+    "name": "purescript-rdf",
+    "license": [
+        "MIT"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/wintechis/purescript-rdf"
+    },
+    "ignore": [
+        "**/.*",
+        "node_modules",
+        "bower_components",
+        "output"
+    ],
+    "dependencies": {
+        "purescript-arrays": "^v7.0.0",
+        "purescript-console": "^v6.0.0",
+        "purescript-datetime": "^v6.0.0",
+        "purescript-effect": "^v4.0.0",
+        "purescript-either": "^v6.1.0",
+        "purescript-foldable-traversable": "^v6.0.0",
+        "purescript-formatters": "^v7.0.0",
+        "purescript-integers": "^v6.0.0",
+        "purescript-lists": "^v7.0.0",
+        "purescript-maybe": "^v6.0.0",
+        "purescript-ordered-collections": "^v3.0.0",
+        "purescript-parsing": "^v9.1.0",
+        "purescript-prelude": "^v6.0.0",
+        "purescript-strings": "^v6.0.0"
+    }
+}
