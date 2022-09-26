@@ -1,0 +1,361 @@
+module RDFPS.TurtleParser (parse) where
+
+import Prelude
+
+import Control.Extend ((<<=))
+import Data.Array (fromFoldable) as A
+import Data.Char (fromCharCode)
+import Data.Either (Either)
+import Data.Int (fromStringAs, hexadecimal)
+import Data.List (List(..), catMaybes, fold, many, (:))
+import Data.List.Types (NonEmptyList)
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set (empty)
+import Data.Set (fromFoldable) as S
+import Data.String (codePointFromChar)
+import Data.String.CodeUnits (fromCharArray)
+import Data.Tuple (Tuple(..))
+import Parsing (ParseError, Parser, fail, runParser)
+import Parsing.Combinators (lookAhead, many1, manyTill, optionMaybe, try, (<|>))
+import Parsing.Expr (Operator(..))
+import Parsing.String (anyChar, char, string)
+import Parsing.String.Basic (alphaNum, digit, hexDigit, letter, noneOf, oneOf, skipSpaces)
+import RDF (Graph, Quad, Term, blankNode, defaultGraph, literalLang, literalType, namedNode, namedNode', quad)
+import RDF.Prefixes (Prefix(..), xsd)
+
+data Statement = Directive Directive | Triples (List Quad)
+
+data Directive = Prefix String String | Base String
+
+type OnePredicateObjectList = Tuple Term (List Term)
+type PredicatesObjectList = Tuple (List Term Term)
+
+oneToMultPredicates :: List OnePredicateObjectList -> PredicatesObjectList
+oneToMultPredicates _ = Nil --TODO
+
+parse :: String -> Either ParseError Graph
+parse s = runParser s turtleDoc
+
+turtleDoc :: Parser String Graph
+turtleDoc = do
+  statements :: List Statement <- many (statement)
+  pure empty --TODO
+
+statement :: Parser String Statement
+statement = do
+  _ <- skipSpaces
+  s <- directive <|> do
+    t <- triples
+    _ <- skipSpaces
+    _ <- char '.'
+    pure t
+  _ <- skipSpaces
+  pure s
+
+directive :: Parser String Directive
+directive = prefixID <|> base <|> sparqlPrefix <|> sparqlBase
+
+prefixID :: Parser String Directive
+prefixID = do
+  _ <- skipSpaces
+  _ <- string "@prefix"
+  _ <- skipSpaces
+  prefix <- pname_ns 
+  _ <- skipSpaces
+  iri <- iriref
+  _ <- skipSpaces
+  _ <- char '.'
+  _ <- skipSpaces
+  pure $ Prefix prefix iri
+
+base :: Parser String Directive
+base = do
+  _ <- skipSpaces
+  _ <- string "@base"
+  _ <- skipSpaces
+  iri <- iriref
+  _ <- skipSpaces
+  _ <- char '.'
+  _ <- skipSpaces
+  pure $ Base iri
+
+sparqlBase :: Parser String Directive
+sparqlBase = do
+  _ <- skipSpaces
+  _ <- string "BASE"
+  _ <- skipSpaces
+  iri <- iriref
+  _ <- skipSpaces
+  pure $ Base iri
+
+sparqlPrefix :: Parser String Directive
+sparqlPrefix = do
+  _ <- skipSpaces
+  _ <- string "PREFIX"
+  _ <- skipSpaces
+  prefix <- pname_ns 
+  _ <- skipSpaces
+  iri <- iriref
+  _ <- skipSpaces
+  pure $ Prefix prefix iri
+
+triples :: Parser String (List Quad)
+triples = triples1 <|> triples2
+  where
+    triples1 = do
+      _ <- skipSpaces
+      s <- subject
+      _ <- skipSpaces
+      pos <- predicateObjectList
+      _ <- skipSpaces
+      pure $ (\p o -> quad subject p o defaultGraph) <$> pos
+    triples2 = do
+      _ <- skipSpaces
+      bn <- blankNodePropertyList
+      _ <- skipSpaces
+      pos <- optionMaybe predicateObjectList
+      _ <- skipSpaces
+      pure $ [] --TODO
+
+predicateObjectList :: Parser String PredicatesObjectList
+predicateObjectList = do
+  vol <- verbObjectList
+  vols <- many do
+    _ <- char ';'
+    vol' <- optionMaybe verbObjectList
+    pure $ catMaybes vol'
+  pure $ oneToMultPredicates $ vol : vols
+
+verbObjectList :: Parser String OnePredicateObjectList
+verbObjectList = do
+  _ <- skipSpaces
+  verb <- verb
+  _ <- skipSpaces
+  objects <- objectList  
+  _ <- skipSpaces
+  pure $ Tuple verb objects
+
+verb :: Parser String Term
+verb = predicate <|> char 'a'
+
+subject :: Parser String Term
+subject = iri <|> blankNode <|> collection
+
+predicate :: Parser String Term
+predicate = iri
+
+object :: Parser String Term
+object = iri <|> blankNode <|> collection <|> blankNodePropertyList <|> literal
+
+literal :: Parser String Term
+literal = rdfLiteral <|> numericLiteral <|> booleanLiteral
+
+blankNodePropertyList :: Parser String PredicatesObjectList
+blankNodePropertyList = do
+  _ <- skipSpaces
+  _ <- char '['
+  _ <- skipSpaces
+  pol <- predicateObjectList
+  _ <- skipSpaces
+  _ <- char ']'
+  _ <- skipSpaces
+  pure pol
+
+collection :: Parser String (List Term) --TODO
+collection = do
+  _ <- skipSpaces
+  _ <- char '(' 
+  objects <- many $ skipSpaces <<= object <<= skipSpaces
+  _ <- char ')' 
+  _ <- skipSpaces
+  pure objects
+
+numericLiteral :: Parser String Term
+numericLiteral = integer <|> decimal <|> double
+
+rdfLiteral :: Parser String Term
+rdfLiteral = rdfLiteral1 <|> rdfLiteral2
+  where
+    rdfLiteral1 = do
+      _ <- skipSpaces
+      value <- turtleString
+      lang <- langTag
+      _ <- skipSpaces
+      pure $ literalLang value lang
+    rdfLiteral2 = do
+      _ <- skipSpaces
+      value <- turtleString
+      _ <- string "^^"
+      iri <- iri
+      _ <- skipSpaces
+      pure $ literalType value iri
+
+booleanLiteral :: Parser String Term
+booleanLiteral = booleanLiteral1 <|> booleanLiteral2
+  where
+    booleanLiteral1 = do
+      _ <- string "true"
+      pure $ literalType "true" (namedNode' xsd "boolean")
+    booleanLiteral2 = do
+      _ <- string "false"
+      pure $ literalType "false" (namedNode' xsd "boolean")
+
+turtleString :: Parser String String
+turtleString = stringLiteralQuote <|> stringLiteralSingleQuote <|> stringLiteralLongSingleQuote <|> stringLiteralLongQuote
+
+iri :: Parser String Term
+iri = iriRef <|> prefixedName
+
+prefixedName :: Parser String Term
+prefixedName = pname_ln <|> pname_ns
+
+blankNode :: Parser String Term
+blankNode = blankNodeLable <|> anon
+
+iriRef :: Parser String Term
+iriRef = do
+  _ <- char '<'
+  iri <- manyTill ((noneOf [
+    '\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09',
+    '\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19',
+    '\x20', '<', '>', '"', '{' ,'}', '|', '^', '`', '\\']) <|> uChar) (char '>')
+  pure (namedNode $ fromCharArray $ A.fromFoldable iri)
+
+pname_ns :: Parser String Prefix
+pname_ns = do
+  _ <- skipSpaces
+  prefix <- optionMaybe pn_prefix
+  _ <- char ':'
+  pure $ prefix
+
+pname_ln :: Parser String Term
+pname_ln = do
+  prefix <- pname_ns
+  local <- pn_local
+  pure $ namedNode' prefix local
+
+
+langTag :: Parser String String
+langTag = do
+  _ <- char '@'
+  lang1 <- many1 letter
+  lang2 <- many langRest
+  pure ((fromCharArray $ A.fromFoldable $ lang1) <> (fold lang2))
+    where
+      langRest :: Parser String String
+      langRest = do
+        _ <- char '-'
+        ls :: NonEmptyList Char <- many1 alphaNum
+        pure ("-" <> (fromCharArray $ A.fromFoldable ls))
+
+eol :: Parser String Unit
+eol = do
+  _ <- many (char '\xD' <|> char '\xA')
+  pure unit
+
+iriRef :: Parser String Term
+iriRef = do
+  _ <- char '<'
+  iri <- manyTill ((noneOf [
+    '\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09',
+    '\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19',
+    '\x20', '<', '>', '"', '{' ,'}', '|', '^', '`', '\\']) <|> uChar) (char '>')
+  pure (namedNode $ fromCharArray $ A.fromFoldable iri)
+
+stringLiteralQuote :: Parser String String
+stringLiteralQuote = do
+  _ <- char '"'
+  litString <- manyTill ((noneOf []) <|> eChar <|> uChar) (char '"')
+  pure (fromCharArray $ A.fromFoldable litString)
+
+blankNodeLabel :: Parser String Term
+blankNodeLabel = do
+  _ <- string "_:"
+  first :: Char <- pnCharsU <|> digit
+  end <- optionMaybe $ manyTill (pnChars <|> char '.') (lookAhead $ char ' ') -- TODO last char not .
+  pure (blankNode $ fromCharArray (A.fromFoldable (first : (fromMaybe Nil end))))
+
+uChar :: Parser String Char
+uChar = do
+  u <- uChar4 <|> uChar6
+  pure u 
+    where
+      uChar4 :: Parser String Char
+      uChar4 = do
+        _ <- string "\\u" <|> string "\\U"
+        h1 <- hexDigit
+        h2 <- hexDigit
+        h3 <- hexDigit
+        h4 <- hexDigit
+        let ch = do
+              codePoint <- getCodePoint h1 h2 h3 h4
+              fromCharCode codePoint
+        case ch of 
+          Nothing -> fail "uChar is not a valid character"
+          Just c -> pure c
+          where
+            getCodePoint h1 h2 h3 h4 = fromStringAs hexadecimal (fromCharArray [ h1, h2, h3, h4])
+      uChar6 :: Parser String Char
+      uChar6 = do
+        _ <- string "\\u" <|> string "\\U"
+        h1 <- hexDigit
+        h2 <- hexDigit
+        h3 <- hexDigit
+        h4 <- hexDigit
+        h5 <- hexDigit
+        h6 <- hexDigit
+        let ch = do
+              codePoint <- getCodePoint h1 h2 h3 h4 h5 h6
+              fromCharCode codePoint
+        case ch of 
+          Nothing -> fail "uChar is not a valid character"
+          Just c -> pure c
+          where
+            getCodePoint h1 h2 h3 h4 h5 h6 = fromStringAs hexadecimal (fromCharArray [ h1, h2, h3, h4, h5, h6 ])
+
+eChar :: Parser String Char
+eChar = do
+  _ <- char '\\'
+  e <- oneOf [ 't', 'b', 'n', 'r', 'f', '"', ''', '\\' ]
+  let c = case e of 
+          't' -> '\t'
+          'b' -> '\x08'
+          'n' -> '\n'
+          'r' -> '\r'
+          'f' -> '\x0c'
+          '"' -> '"'
+          ''' -> '''
+          '\\' -> '\\'
+          _ -> '\x00'
+  pure c
+
+pnCharsBase :: Parser String Char
+pnCharsBase = do
+  c <- anyChar
+  let cp = codePointFromChar c
+  if codePointValid cp then pure c else fail $ "Character " <> show c <> " not allowed in pnCharsBase"
+    where
+      codePointValid cp' = cp' >= (codePointFromChar '\x0041') && cp' <= (codePointFromChar '\x005A') ||
+                           cp' >= (codePointFromChar '\x0061') && cp' <= (codePointFromChar '\x007A') ||
+                           cp' >= (codePointFromChar '\x00C0') && cp' <= (codePointFromChar '\x00D6') ||
+                           cp' >= (codePointFromChar '\x00D8') && cp' <= (codePointFromChar '\x00F6') ||
+                           cp' >= (codePointFromChar '\x00F8') && cp' <= (codePointFromChar '\x02FF') ||
+                           cp' >= (codePointFromChar '\x0370') && cp' <= (codePointFromChar '\x037D') ||
+                           cp' >= (codePointFromChar '\x037F') && cp' <= (codePointFromChar '\x1FFF') ||
+                           cp' >= (codePointFromChar '\x200C') && cp' <= (codePointFromChar '\x200D') ||
+                           cp' >= (codePointFromChar '\x2070') && cp' <= (codePointFromChar '\x218F') ||
+                           cp' >= (codePointFromChar '\x2C00') && cp' <= (codePointFromChar '\x2FEF') ||
+                           cp' >= (codePointFromChar '\x3001') && cp' <= (codePointFromChar '\xD7FF') ||
+                           cp' >= (codePointFromChar '\xF900') && cp' <= (codePointFromChar '\xFDCF') ||
+                           cp' >= (codePointFromChar '\xFDF0') && cp' <= (codePointFromChar '\xFFFD')
+                           -- TODO cp' >= (codePointFromChar '\x10000') && cp' <= (codePointFromChar '\xEFFFF')
+
+pnCharsU :: Parser String Char
+pnCharsU = do
+  c <- char '_' <|> char ':' <|> pnCharsBase
+  pure c
+
+pnChars :: Parser String Char
+pnChars = do
+  c <- char '-' <|> digit <|> char '\x00B7' <|> pnCharsU -- \x0300 - \x036F <|> \x203F - \x2040
+  pure c

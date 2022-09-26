@@ -1,0 +1,177 @@
+module RDFPS.Notation3Parser
+  ( Directive(..)
+  , parse
+  )
+  where
+
+import Prelude
+
+import Control.Alt ((<|>))
+import Data.Array (catMaybes, concat, (:))
+import Data.Either (Either(..))
+import Data.Tuple (Tuple(..))
+import Parsing (ParseError, Parser, runParser)
+import Parsing.Combinators (option, optionMaybe)
+import Parsing.Combinators.Array (many)
+import Parsing.String (char, string)
+import Parsing.String.Basic (skipSpaces)
+import RDF (Quad, Term, defaultGraph, namedNode', quad)
+import RDF.Prefixes (rdf)
+
+data Directive = Base String | Prefix String String
+
+data PredicateObjectList = PredicateObjectList (Array (Tuple Term ObjectList))
+
+data ObjectList = ObjectList (Array Term)
+
+allTriples :: Term -> PredicateObjectList -> Array Quad
+allTriples s (PredicateObjectList pos) = concat $ (allTriplesPredicates s) <$> pos
+
+allTriplesPredicates :: Term -> Tuple Term ObjectList -> Array Quad
+allTriplesPredicates s (Tuple p (ObjectList os)) = (allTriplesObjects s p) <$> os
+
+allTriplesObjects :: Term -> Term -> Term -> Quad
+allTriplesObjects s p o = quad s p o defaultGraph
+
+parse :: String -> Either ParseError (Array (Either Directive (Array Quad)))
+parse s = runParser s n3Doc
+
+n3Doc :: Parser String (Array (Either Directive (Array Quad)))
+n3Doc = many ((n3Statement <* skipSpaces <* char '.') <|> sparqlDirective)
+
+n3Statement :: Parser String (Either Directive (Array Quad))
+n3Statement = (n3Directive >>= (\d -> pure (Left d))) <|> (triples >>= (\ts -> pure (Right ts)))
+
+n3Directive :: Parser String Directive
+n3Directive = prefixId <|> base
+
+sparqlDirective :: Parser String (Either Directive (Array Quad))
+sparqlDirective = Left <$> (sparqlBase <|> sparqlPrefix)
+
+sparqlBase :: Parser String Directive
+sparqlBase = do
+  _ <- terminalBase
+  _ <- skipSpaces
+  prefix <- terminalIriref
+  pure $ Base prefix
+
+sparqlPrefix :: Parser String Directive
+sparqlPrefix = do
+  _ <- terminalPrefix
+  _ <- skipSpaces
+  prefix <- terminalPname_ns
+  _ <- skipSpaces
+  local <- terminalIriref
+  pure $ Prefix prefix local
+
+prefixId :: Parser String Directive
+prefixId = do
+  _ <- string "@prefix"
+  _ <- skipSpaces
+  prefix <- terminalPname_ns
+  _ <- skipSpaces
+  local <- terminalIriref
+  pure $ Prefix prefix local
+
+base :: Parser String Directive
+base = do
+  _ <- string "@base"
+  _ <- skipSpaces
+  p <- terminalIriref
+  pure $ Base p
+
+triples :: Parser String (Array Quad)
+triples = option [] do
+  s <-subject 
+  _ <- skipSpaces
+  pos <- predicateObjectList
+  pure $ allTriples s pos
+
+predicateObjectList :: Parser String PredicateObjectList
+predicateObjectList = do
+  firstVerb <- verb
+  _ <- skipSpaces
+  firstObjectList <- objectList
+  rest <- catMaybes <$> many do
+    _ <-skipSpaces
+    _ <- char ';'
+    _ <- skipSpaces
+    m <- optionMaybe do
+      v <- verb
+      _ <- skipSpaces
+      os <- objectList
+      pure $ Tuple v os
+    pure m
+  pure $ PredicateObjectList $ (Tuple firstVerb firstObjectList) : rest
+
+objectList :: Parser String ObjectList
+objectList = do
+  firstObject <- object 
+  rest <- many $ skipSpaces *> char ',' *> skipSpaces *> object
+  pure $ ObjectList $ firstObject : rest
+
+verb :: Parser String Term
+verb = predicate <|> (char 'a' *> pure (namedNode' rdf "type")) -- TODO
+
+subject :: Parser String Term
+subject = expression
+
+object :: Parser String Term
+object = expression
+
+predicate :: Parser String Term
+predicate = expression <|> ((string "<-") *> skipSpaces *> expression)
+
+expression :: Parser String Term
+expression = path
+
+path :: Parser String Term
+path = pathItem --TODO
+
+pathItem :: Parser String Term
+pathItem = iri <|> blankNode <|> quickVar <|> collection <|> blankNodePropertyList <|> iriPropertyList <|> literal <|> formula
+
+--literal :: Parser String Term
+--literal = rdfLiteral <|> numericLiteral <|> terminalBooleanLiteral
+--
+--blankNodePropertyList :: Parser String Term
+--blankNodePropertyList = char '[' *> skipSpaces *> predicateObjectList <* skipSpaces <* char ']'
+
+iriPropertyList :: Parser String Term
+iriPropertyList = pure defaultGraph
+
+collection :: Parser String Term
+collection = pure defaultGraph
+
+formula :: Parser String Term
+formula = pure defaultGraph
+
+numericLiteral :: Parser String Term
+numericLiteral = pure defaultGraph
+
+rdfLiteral :: Parser String Term
+rdfLiteral = pure defaultGraph
+
+iri :: Parser String Term
+iri = pure defaultGraph
+
+blankNode :: Parser String Term
+blankNode = pure defaultGraph
+
+quickVar :: Parser String Term
+quickVar = pure defaultGraph
+
+terminalBooleanLiteral :: Parser String String
+terminalBooleanLiteral = pure "TODO"
+
+terminalIriref :: Parser String String
+terminalIriref = pure "TODO"
+
+terminalPrefix :: Parser String String
+terminalPrefix = pure "TODO"
+
+terminalPname_ns :: Parser String String
+terminalPname_ns = pure "TODO"
+
+terminalBase :: Parser String String
+terminalBase = pure "TODO"
