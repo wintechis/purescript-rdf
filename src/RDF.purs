@@ -2,7 +2,6 @@ module RDF (
   Term,
   Quad,
   Graph,
-  dateTimeToTerm,
   namedNode,
   namedNode',
   blankNode,
@@ -19,22 +18,14 @@ module RDF (
   subject,
   predicate,
   object,
-  graph,
-  serialize,
-  termToBoolean,
-  termToInt
+  graph
 ) where
 
 import Prelude hiding (map)
 
-import Data.DateTime (DateTime)
-import Data.Foldable (foldl)
-import Data.Formatter.DateTime (Formatter, FormatterCommand(..), format)
-import Data.Int (fromString)
-import Data.List (fromFoldable)
 import Data.Maybe (Maybe(..))
-import Data.Set (Set, map)
-import RDF.Prefixes (Prefix(..), xsd)
+import Data.Set (Set)
+import RDF.Prefixes (Prefix(..))
 
 data Term = NamedNode String | BlankNode String | LiteralLang String String | LiteralType String Term | Variable String | DefaultGraph
 derive instance eqTerm :: Eq Term
@@ -118,40 +109,3 @@ object (Quad _ _ o _) = o
 
 graph :: Quad -> Term
 graph (Quad _ _ _ g) = g
-
-serialize :: Graph -> String
-serialize g = foldl (\q1 q2 -> q1 <> "\n" <> q2) "" $ map show g
-
-termToBoolean :: Term -> Maybe Boolean
-termToBoolean (LiteralType v t) = if t == namedNode' xsd "boolean" then
-  case v of 
-    "true" -> Just true
-    "false" -> Just false
-    _ -> Nothing
-  else Nothing
-termToBoolean _ = Nothing
-
-termToInt :: Term -> Maybe Int
-termToInt (LiteralType v t) = if t == namedNode' xsd "integer" then fromString v else Nothing
-termToInt _ = Nothing
-
-iso8601Format :: Formatter
-iso8601Format = fromFoldable
-  [ YearFull
-  , Placeholder "-"
-  , MonthTwoDigits
-  , Placeholder "-"
-  , DayOfMonthTwoDigits
-  , Placeholder "T"
-  , Hours24
-  , Placeholder ":"
-  , MinutesTwoDigits
-  , Placeholder ":"
-  , SecondsTwoDigits
-  , Placeholder "."
-  , Milliseconds
-  , Placeholder "Z"
-  ]
-
-dateTimeToTerm :: DateTime -> Term
-dateTimeToTerm dt = literalType (format iso8601Format dt) (namedNode' xsd "dateTimeStamp")

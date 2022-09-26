@@ -10,7 +10,7 @@ When creating a new Spago project, you can use
 `spago init --no-comments` or `spago init -C`
 to generate this file without the comments in this block.
 -}
-{ name = "my-project"
+{ name = "purescript-rdf"
 , dependencies =
   [ "arrays"
   , "console"
@@ -29,4 +29,6 @@ to generate this file without the comments in this block.
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
+, license = "MIT"
+, repository = "https://github.com/wintechis/purescript-rdf"
 }
