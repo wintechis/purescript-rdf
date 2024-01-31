@@ -1,0 +1,22 @@
+package:
+  dependencies:
+  - arrays
+  - console
+  - datetime
+  - debug
+  - effect
+  - either
+  - foldable-traversable
+  - formatters
+  - integers
+  - lists
+  - maybe
+  - ordered-collections
+  - parsing
+  - prelude
+  - strings
+  name: rdf
+workspace:
+  extra_packages: {}
+  package_set:
+    url: https://raw.githubusercontent.com/purescript/package-sets/psc-0.15.2-20220706/packages.json
