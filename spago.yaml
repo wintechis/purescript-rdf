@@ -1,21 +1,19 @@
 package:
   dependencies:
-  - arrays
-  - console
-  - datetime
-  - debug
-  - effect
-  - either
-  - foldable-traversable
-  - formatters
-  - integers
-  - lists
-  - maybe
-  - ordered-collections
-  - parsing
-  - prelude
-  - strings
+    - arrays: "*"
+    - console: "*"
+    - effect: "*"
+    - foldable-traversable: "*"
+    - maybe: "*"
+    - ordered-collections: "*"
+    - prelude: "*"
   name: rdf
+  publish:
+    version: 0.1.1
+    license: MIT
+    location:
+      githubOwner: wintechis
+      githubRepo: purescript-rdf
 workspace:
   extra_packages: {}
   package_set:
